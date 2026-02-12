@@ -1,0 +1,53 @@
+<!-- test-api.html -->
+<!DOCTYPE html>
+<html>
+<head>
+    <title>API Test</title>
+</head>
+<body>
+    <h1>Code Hunt API Tests</h1>
+    
+    <div>
+        <h2>Test 1: Admin Login</h2>
+        <button onclick="testAdminLogin()">Test Admin Login</button>
+        <div id="result1"></div>
+    </div>
+    
+    <div>
+        <h2>Test 2: Get Questions</h2>
+        <button onclick="getQuestions()">Get Questions</button>
+        <div id="result2"></div>
+    </div>
+    
+    <script>
+        async function testAdminLogin() {
+            try {
+                const response = await fetch('http://localhost:3001/api/admin/login', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        teamCode: 'ADMIN001',
+                        password: 'Admin@123'
+                    })
+                });
+                const data = await response.json();
+                document.getElementById('result1').innerHTML = 
+                    `<pre>${JSON.stringify(data, null, 2)}</pre>`;
+            } catch (error) {
+                document.getElementById('result1').innerHTML = 'Error: ' + error;
+            }
+        }
+        
+        async function getQuestions() {
+            try {
+                const response = await fetch('http://localhost:3001/api/admin/questions');
+                const data = await response.json();
+                document.getElementById('result2').innerHTML = 
+                    `<pre>${JSON.stringify(data, null, 2)}</pre>`;
+            } catch (error) {
+                document.getElementById('result2').innerHTML = 'Error: ' + error;
+            }
+        }
+    </script>
+</body>
+</html>
