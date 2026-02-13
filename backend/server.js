@@ -164,6 +164,22 @@ const authenticateToken = (req, res, next) => {
         next();
     });
 };
+const verifyAdmin = (req, res, next) => {
+    if (!req.user) {
+        return res.status(401).json({ error: 'Authentication required' });
+    }
+    
+    // Check if user is admin (based on teamCode or isAdmin flag)
+    if (req.user.teamCode !== 'ADMIN001' && !req.user.isAdmin) {
+        console.log('❌ Admin access denied for user:', req.user.teamCode);
+        return res.status(403).json({ error: 'Admin access required' });
+    }
+    
+    // Set admin flag for other middleware
+    req.user.isAdmin = true;
+    console.log('✅ Admin verified:', req.user.teamCode);
+    next();
+};
 
 // ==================== ROUTES ====================
 
@@ -488,35 +504,168 @@ app.get('/api/admin/questions', async (req, res) => {
     }
 });
 
-// 3. Delete question - FIXED with admin permission check
-app.delete('/api/admin/questions/:id', authenticateToken, async (req, res) => {
-    const questionId = req.params.id;
+
+// ============ COMPLETE FIXED DELETE ROUTE ============
+app.delete('/api/admin/questions/:id', authenticateToken, verifyAdmin, async (req, res) => {
+    const questionId = parseInt(req.params.id);
     
-    // Check if user is admin
-    if (!req.user.isAdmin) {
-        return res.status(403).json({ error: 'Admin access required' });
+    // Validate ID
+    if (isNaN(questionId) || questionId <= 0) {
+        return res.status(400).json({ error: 'Invalid question ID' });
     }
-    
+
+    console.log(`🗑️ Delete request for question ID: ${questionId}`);
+    console.log(`👤 User: ${req.user.teamCode}, isAdmin: ${req.user.isAdmin}`);
+
     try {
-        // First check if question exists
-        const checkResult = await pool.query('SELECT id FROM round1_questions WHERE id = $1', [questionId]);
-        
-        if (checkResult.rows.length === 0) {
+        // Check if question exists
+        const questionCheck = await pool.query(
+            'SELECT id, question_text FROM round1_questions WHERE id = $1',
+            [questionId]
+        );
+
+        if (questionCheck.rows.length === 0) {
+            console.log(`❌ Question ${questionId} not found`);
             return res.status(404).json({ error: 'Question not found' });
         }
+
+        console.log(`📝 Deleting question: ${questionCheck.rows[0].question_text.substring(0, 50)}...`);
+
+        // Begin transaction
+        await pool.query('BEGIN');
+
+        // 1. Delete all answers for this question
+        const answersResult = await pool.query(
+            'DELETE FROM round1_answers WHERE question_id = $1 RETURNING id',
+            [questionId]
+        );
         
-        // Delete the question
-        await pool.query('DELETE FROM round1_questions WHERE id = $1', [questionId]);
+        console.log(`✅ Deleted ${answersResult.rowCount} answers`);
+
+        // 2. Delete the question
+        const questionResult = await pool.query(
+            'DELETE FROM round1_questions WHERE id = $1 RETURNING id',
+            [questionId]
+        );
+
+        // Commit transaction
+        await pool.query('COMMIT');
+
+        console.log(`✅ Question ${questionId} deleted successfully`);
         
         res.json({ 
             success: true, 
-            message: 'Question deleted successfully' 
+            message: 'Question deleted successfully',
+            deletedAnswers: answersResult.rowCount,
+            deletedQuestion: questionResult.rows[0]?.id
         });
+
     } catch (error) {
-        console.error('Delete error:', error);
-        res.status(500).json({ error: error.message });
+        // Rollback transaction on error
+        await pool.query('ROLLBACK');
+        
+        console.error('❌ Delete error:', error);
+        res.status(500).json({ 
+            success: false, 
+            error: error.message 
+        });
     }
 });
+
+// ============ COMPLETE FIXED DELETE ALL QUESTIONS ROUTE ============
+app.delete('/api/admin/delete-all-questions', authenticateToken, verifyAdmin, async (req, res) => {
+    console.log('='.repeat(50));
+    console.log('🗑️ DELETE ALL QUESTIONS REQUEST RECEIVED');
+    console.log('='.repeat(50));
+    console.log(`👤 User: ${req.user?.teamCode}, isAdmin: ${req.user?.isAdmin}`);
+    console.log(`📅 Time: ${new Date().toISOString()}`);
+    
+    try {
+        // Begin transaction
+        await pool.query('BEGIN');
+        
+        const stats = {
+            answers: 0,
+            cheatLogs: 0,
+            sessions: 0,
+            questions: 0
+        };
+
+        // 1. FIRST: Delete all answers (this is the main foreign key constraint)
+        const answersResult = await pool.query(
+            'DELETE FROM round1_answers RETURNING id'
+        );
+        stats.answers = answersResult.rowCount;
+        console.log(`✅ Deleted ${stats.answers} answers`);
+
+        // 2. SECOND: Delete cheat logs
+        const cheatLogsResult = await pool.query(
+            'DELETE FROM cheat_logs RETURNING id'
+        );
+        stats.cheatLogs = cheatLogsResult.rowCount;
+        console.log(`✅ Deleted ${stats.cheatLogs} cheat logs`);
+
+        // 3. THIRD: Reset quiz sessions (set scores to 0)
+        const sessionsResult = await pool.query(
+            `UPDATE quiz_sessions 
+             SET total_score = 0, 
+                 cheat_score = 0, 
+                 status = 'not_started', 
+                 end_time = NULL 
+             WHERE status = 'completed' OR status = 'in_progress'
+             RETURNING id`
+        );
+        stats.sessions = sessionsResult.rowCount;
+        console.log(`✅ Reset ${stats.sessions} quiz sessions`);
+
+        // 4. FOURTH: Delete all questions
+        const questionsResult = await pool.query(
+            'DELETE FROM round1_questions RETURNING id'
+        );
+        stats.questions = questionsResult.rowCount;
+        console.log(`✅ Deleted ${stats.questions} questions`);
+
+        // Commit transaction
+        await pool.query('COMMIT');
+        
+        console.log('='.repeat(50));
+        console.log('🎉 DELETE ALL QUESTIONS COMPLETED SUCCESSFULLY');
+        console.log('='.repeat(50));
+        console.log(`📊 STATISTICS:`);
+        console.log(`   • Questions deleted: ${stats.questions}`);
+        console.log(`   • Answers deleted: ${stats.answers}`);
+        console.log(`   • Cheat logs deleted: ${stats.cheatLogs}`);
+        console.log(`   • Sessions reset: ${stats.sessions}`);
+        console.log('='.repeat(50));
+
+        res.status(200).json({
+            success: true,
+            message: 'All questions and related data deleted successfully',
+            stats: stats,
+            timestamp: new Date().toISOString()
+        });
+
+    } catch (error) {
+        // Rollback transaction on error
+        await pool.query('ROLLBACK');
+        
+        console.error('❌ DELETE ALL QUESTIONS ERROR:');
+        console.error(`   • Error message: ${error.message}`);
+        console.error(`   • Error code: ${error.code}`);
+        console.error(`   • Error detail: ${error.detail || 'No details'}`);
+        console.error(`   • Stack trace: ${error.stack}`);
+        
+        // Send appropriate error response
+        res.status(500).json({
+            success: false,
+            error: error.message,
+            code: error.code,
+            detail: error.detail || null,
+            hint: 'Check server logs for more details'
+        });
+    }
+});
+
 
 // 4. Update Question (Admin)
 app.put('/api/admin/questions/:id', async (req, res) => {
@@ -782,20 +931,7 @@ app.post('/api/admin/update-password', async (req, res) => {
     }
 });
 
-// 3. Delete question
-app.delete('/api/admin/questions/:id', authenticateToken, async (req, res) => {
-    const questionId = req.params.id;
-    
-    try {
-        await pool.query('DELETE FROM round1_questions WHERE id = $1', [questionId]);
-        res.json({ 
-            success: true, 
-            message: 'Question deleted successfully' 
-        });
-    } catch (error) {
-        res.status(500).json({ error: error.message });
-    }
-});
+
 
 // 4. Get all teams
 app.get('/api/admin/teams', authenticateToken, async (req, res) => {
@@ -815,7 +951,8 @@ app.get('/api/admin/teams', authenticateToken, async (req, res) => {
         res.status(500).json({ error: error.message });
     }
 });
-
+const round2Routes = require('./routes/round2');
+app.use('/api/round2', round2Routes);
 // ==================== SOCKET.IO ====================
 
 io.on('connection', (socket) => {
