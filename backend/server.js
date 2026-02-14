@@ -5,6 +5,7 @@ const bcrypt = require('bcryptjs');
 const jwt = require('jsonwebtoken');
 const http = require('http');
 const socketIo = require('socket.io');
+const path = require('path'); // Add this
 require('dotenv').config();
 
 const app = express();
@@ -15,19 +16,22 @@ const io = socketIo(server, {
         methods: ["GET", "POST"]
     }
 });
-const round2Routes = require('./routes/round2');
+
+// Import routes - FIX THE PATH
+const round2Routes = require(path.join(__dirname, 'routes', 'round2'));
 
 // Middleware
 app.use(cors());
 app.use(express.json());
 
-// Database connection with YOUR Render URL
+// Database connection
 const pool = new Pool({
     connectionString: process.env.DATABASE_URL,
     ssl: {
-        rejectUnauthorized: false  // Required for Render
+        rejectUnauthorized: false
     }
 });
+
 
 console.log('🔗 Database URL:', process.env.DATABASE_URL);
 
@@ -1470,18 +1474,8 @@ server.listen(PORT, () => {
     console.log('='.repeat(50));
     console.log('🚀 CODE HUNT BACKEND SERVER STARTED');
     console.log('='.repeat(50));
-    console.log(`📡 Server URL: http://localhost:${PORT}`);
+    console.log(`📡 Server URL: http://0.0.0.0:${PORT}`);
     console.log(`🔗 Database: Render PostgreSQL`);
-    console.log(`🔐 Admin Login: ADMIN001 / ${process.env.ADMIN_PASSWORD}`);
-    console.log(`🎯 Round 1 Password: ${process.env.ROUND1_PASSWORD || 'Round1@2024'}`);
-    console.log(`🎯 Round 2 Password: ${process.env.ROUND2_PASSWORD || 'Round2@2024'}`);
-    console.log('='.repeat(50));
-    console.log('📋 API Routes Available:');
-    console.log('   ✅ /api/admin/round1/questions (GET, POST, DELETE)');
-    console.log('   ✅ /api/admin/round2/questions (GET, POST, DELETE)');
-    console.log('   ✅ /api/admin/coding-results (GET)');
-    console.log('   ✅ /api/admin/settings (GET)');
-    console.log('   ✅ /api/admin/set-round1-password (POST)');
-    console.log('   ✅ /api/admin/set-round2-password (POST)');
+    console.log(`🔗 Database: Connected`);
     console.log('='.repeat(50));
 });
