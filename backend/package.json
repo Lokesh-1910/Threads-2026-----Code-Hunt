@@ -17,6 +17,9 @@
     "socket.io": "4.7.2",
     "axios": "1.6.2"
   },
+  "overrides": {
+  "debug": "^4.3.4"
+},
   "devDependencies": {
     "nodemon": "3.0.1"
   }
