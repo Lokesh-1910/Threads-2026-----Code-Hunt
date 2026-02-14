@@ -18,7 +18,8 @@
     "axios": "1.6.2"
   },
   "overrides": {
-  "debug": "^4.3.4"
+  "debug": "^4.3.4",
+  "iconv-lite": "^0.6.3"
 },
   "devDependencies": {
     "nodemon": "3.0.1"
