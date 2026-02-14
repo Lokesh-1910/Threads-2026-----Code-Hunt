@@ -20,7 +20,15 @@
   },
   "overrides": {
     "debug": "^4.3.7",
-    "iconv-lite": "^0.6.3"
+    "finalhandler": {
+      "debug": "^4.3.7"
+    },
+    "send": {
+      "debug": "^4.3.7"
+    },
+    "body-parser": {
+      "debug": "^4.3.7"
+    }
   },
   "devDependencies": {
     "nodemon": "3.0.1"
