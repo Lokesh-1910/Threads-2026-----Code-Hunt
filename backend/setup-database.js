@@ -1,3 +1,4 @@
+// backend/fix-teams-table.js
 const { Pool } = require('pg');
 require('dotenv').config();
 
@@ -6,106 +7,88 @@ const pool = new Pool({
     ssl: { rejectUnauthorized: false }
 });
 
-// Sample questions for Round 1
-const sampleQuestions = [
-    {
-        question_text: "Arrange the code in correct order to print numbers 1 to 5:",
-        question_type: "jumbled_code",
-        options: {
-            lines: [
-                "for i in range(1, 6):",
-                "print(i)",
-                "i = 1",
-                "while i <= 5:",
-                "print(i)",
-                "i += 1"
-            ]
-        },
-        correct_answer: "for i in range(1, 6):,print(i)"
-    },
-    {
-        question_text: "Find the bug in this Python code: print('Hello World')",
-        question_type: "debugging",
-        options: {
-            code: "print('Hello World')",
-            bug_options: ["Missing semicolon", "Extra parenthesis", "No bug", "Wrong quotes"]
-        },
-        correct_answer: "No bug"
-    },
-    {
-        question_text: "Match pseudocode with description:",
-        question_type: "pseudocode_match",
-        options: {
-            pseudocodes: [
-                "IF score >= 60 THEN grade = 'Pass'",
-                "FOR i = 1 TO 10",
-                "WHILE x > 0"
-            ],
-            descriptions: [
-                "Loop 10 times",
-                "Check passing condition",
-                "Repeat until condition false"
-            ]
-        },
-        correct_answer: "IF score >= 60 THEN grade = 'Pass':Check passing condition;FOR i = 1 TO 10:Loop 10 times;WHILE x > 0:Repeat until condition false"
-    },
-    {
-        question_text: "What does HTML stand for?",
-        question_type: "mcq",
-        options: [
-            "Hyper Text Markup Language",
-            "High Tech Modern Language",
-            "Hyper Transfer Markup Language",
-            "Home Tool Markup Language"
-        ],
-        correct_answer: "Hyper Text Markup Language"
-    },
-    {
-        question_text: "Which tag is used for the largest heading in HTML?",
-        question_type: "mcq",
-        options: ["<h6>", "<heading>", "<h1>", "<head>"],
-        correct_answer: "<h1>"
-    }
-];
+async function fixTeamsTable() {
+    console.log('='.repeat(70));
+    console.log('🔧 FIXING TEAMS TABLE - ADDING MISSING COLUMNS');
+    console.log('='.repeat(70));
 
-async function setupDatabase() {
     try {
-        console.log('📝 Adding sample questions to database...');
+        // Add missing columns to teams table
+        console.log('\n📝 Adding columns to teams table...');
         
-        // Clear existing questions
-        await pool.query('DELETE FROM round1_questions');
-        console.log('✅ Cleared existing questions');
+        await pool.query(`
+            ALTER TABLE teams 
+            ADD COLUMN IF NOT EXISTS round1_completed BOOLEAN DEFAULT FALSE,
+            ADD COLUMN IF NOT EXISTS round1_score INT DEFAULT 0,
+            ADD COLUMN IF NOT EXISTS round2_completed BOOLEAN DEFAULT FALSE,
+            ADD COLUMN IF NOT EXISTS round2_score INT DEFAULT 0
+        `);
         
-        // Insert sample questions
-        for (const question of sampleQuestions) {
-            await pool.query(
-                `INSERT INTO round1_questions 
-                 (question_text, question_type, options, correct_answer) 
-                 VALUES ($1, $2, $3, $4)`,
-                [
-                    question.question_text,
-                    question.question_type,
-                    JSON.stringify(question.options),
-                    question.correct_answer
-                ]
-            );
-        }
+        console.log('✅ Columns added successfully!');
+
+        // Verify columns were added
+        const verifyColumns = await pool.query(`
+            SELECT column_name, data_type 
+            FROM information_schema.columns 
+            WHERE table_name = 'teams' 
+            AND column_name IN ('round1_completed', 'round1_score', 'round2_completed', 'round2_score')
+        `);
         
-        console.log('✅ Added 5 sample questions');
-        console.log('🎉 Database setup complete!');
-        console.log('\n📋 Sample Questions Added:');
-        console.log('1. Jumbled Code (Python loop)');
-        console.log('2. Debugging (Python print)');
-        console.log('3. Pseudocode Match');
-        console.log('4. HTML MCQ');
-        console.log('5. HTML Tags MCQ');
+        console.log('\n📊 Verified columns:');
+        verifyColumns.rows.forEach(col => {
+            console.log(`   • ${col.column_name} (${col.data_type})`);
+        });
+
+        // Update existing teams with default values
+        console.log('\n📝 Updating existing teams...');
         
-        process.exit(0);
+        await pool.query(`
+            UPDATE teams 
+            SET 
+                round1_completed = FALSE,
+                round1_score = 0,
+                round2_completed = FALSE,
+                round2_score = 0
+            WHERE round1_completed IS NULL
+        `);
         
+        console.log('✅ Existing teams updated!');
+
+        // Show updated teams data
+        const teams = await pool.query(`
+            SELECT 
+                id, 
+                team_code, 
+                team_name,
+                round1_completed,
+                round1_score,
+                round2_completed,
+                round2_score
+            FROM teams 
+            WHERE team_code != 'ADMIN001'
+            ORDER BY id
+        `);
+        
+        console.log('\n📊 Updated teams data:');
+        teams.rows.forEach(team => {
+            console.log(`   • ${team.team_code}: Round1 ${team.round1_completed ? '✅' : '❌'} (${team.round1_score}/20), Round2 ${team.round2_completed ? '✅' : '❌'} (${team.round2_score}/30)`);
+        });
+
+        console.log('\n' + '='.repeat(70));
+        console.log('✅✅ TEAMS TABLE FIX COMPLETED! ✅✅');
+        console.log('='.repeat(70));
+        console.log('\n🚀 Next steps:');
+        console.log('   1. Restart your backend server');
+        console.log('   2. Login to your team account');
+        console.log('   3. Round 1 should now be AVAILABLE!');
+        console.log('='.repeat(70));
+
     } catch (error) {
-        console.error('❌ Error:', error.message);
-        process.exit(1);
+        console.error('\n❌ ERROR:', error.message);
+        console.error(error);
+    } finally {
+        await pool.end();
     }
 }
 
-setupDatabase();
+fixTeamsTable();
