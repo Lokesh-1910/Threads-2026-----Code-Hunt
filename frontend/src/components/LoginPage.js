@@ -2,7 +2,6 @@ import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import axios from 'axios';
 
-
 function LoginPage() {
     const [teamCode, setTeamCode] = useState('');
     const [password, setPassword] = useState('');
@@ -11,9 +10,12 @@ function LoginPage() {
     const [wakingBackend, setWakingBackend] = useState(false);
     const navigate = useNavigate();
 
-    // ============ SINGLE WAKE-UP SCRIPT ============
+    // ============ PRODUCTION BACKEND URL ============
+    const API_URL = 'https://codehunt-backend-xo52.onrender.com';
+
+    // ============ WAKE-UP SCRIPT ============
     useEffect(() => {
-        const WAKE_UP_URL = 'https://codehunt-backend-xo52.onrender.com/api/db-test';
+        const WAKE_UP_URL = `${API_URL}/api/db-test`;
         
         const wakeUpBackend = async () => {
             setWakingBackend(true);
@@ -48,15 +50,17 @@ function LoginPage() {
                         }
                     } catch (retryError) {
                         console.log('Still waking... will retry on login');
-                        // Keep showing message until user tries to login
-                        // They can still login while backend wakes
+                        // Keep showing message for 10 seconds then hide
+                        setTimeout(() => {
+                            setWakingBackend(false);
+                        }, 10000);
                     }
                 }, 3000);
             }
         };
 
         wakeUpBackend();
-    }, []);
+    }, [API_URL]);
 
     const handleLogin = async (e) => {
         e.preventDefault();
@@ -66,7 +70,7 @@ function LoginPage() {
         try {
             // Check if admin login
             if (teamCode === 'ADMIN001') {
-                const response = await axios.post('http://localhost:3001/api/admin/login', {
+                const response = await axios.post(`${API_URL}/api/admin/login`, {
                     teamCode,
                     password
                 });
@@ -78,7 +82,7 @@ function LoginPage() {
             }
 
             // Regular team login
-            const response = await axios.post('http://localhost:3001/api/auth/login', {
+            const response = await axios.post(`${API_URL}/api/auth/login`, {
                 teamCode,
                 password
             });
@@ -95,7 +99,11 @@ function LoginPage() {
             }
 
         } catch (err) {
-            setError(err.response?.data?.error || 'Login failed. Make sure backend is running.');
+            if (err.code === 'ERR_NETWORK' || !err.response) {
+                setError('Server is waking up. Please wait 30 seconds and try again.');
+            } else {
+                setError(err.response?.data?.error || 'Login failed. Please check your credentials.');
+            }
         } finally {
             setIsLoading(false);
         }
@@ -150,6 +158,29 @@ function LoginPage() {
                     </p>
                 </div>
 
+                {/* WAKE-UP MESSAGE - THIS WAS MISSING! */}
+                {wakingBackend && (
+                    <div style={{
+                        background: '#fef3c7',
+                        border: '2px solid #f59e0b',
+                        borderRadius: '10px',
+                        padding: '15px',
+                        marginBottom: '20px',
+                        textAlign: 'center',
+                        animation: 'pulse 2s infinite'
+                    }}>
+                        <div style={{ marginBottom: '8px' }}>
+                            <span style={{ fontSize: '24px' }}>⏳</span>
+                        </div>
+                        <p style={{ color: '#92400e', fontWeight: '600', marginBottom: '5px' }}>
+                            Waking up server...
+                        </p>
+                        <p style={{ color: '#b45309', fontSize: '13px' }}>
+                            First visit may take 30-50 seconds
+                        </p>
+                    </div>
+                )}
+
                 {/* Error Message */}
                 {error && (
                     <div style={{
@@ -157,7 +188,7 @@ function LoginPage() {
                         border: '2px solid #ef4444',
                         borderRadius: '10px',
                         padding: '15px',
-                        marginBottom: '25px',
+                        marginBottom: '20px',
                         textAlign: 'center',
                         animation: 'shake 0.3s ease'
                     }}>
@@ -346,7 +377,7 @@ function LoginPage() {
                 </div>
             </div>
 
-            {/* Add animation styles */}
+            {/* Animation styles */}
             <style>{`
                 @keyframes slideIn {
                     from {
@@ -368,6 +399,11 @@ function LoginPage() {
                 @keyframes spin {
                     0% { transform: rotate(0deg); }
                     100% { transform: rotate(360deg); }
+                }
+                
+                @keyframes pulse {
+                    0%, 100% { opacity: 1; }
+                    50% { opacity: 0.7; }
                 }
             `}</style>
         </div>
