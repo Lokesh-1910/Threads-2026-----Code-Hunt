@@ -84,7 +84,7 @@ function AdminPanel() {
     const fetchRound1Questions = async () => {
         try {
             const token = localStorage.getItem('token');
-            const response = await axios.get('http://localhost:3001/api/admin/round1/questions', {
+            const response = await axios.get('https://codehunt-backend-xo52.onrender.com/api/admin/round1/questions', {
                 headers: { 'Authorization': `Bearer ${token}` }
             });
             setRound1Questions(response.data);
@@ -97,7 +97,7 @@ function AdminPanel() {
     const fetchRound2Questions = async () => {
         try {
             const token = localStorage.getItem('token');
-            const response = await axios.get('http://localhost:3001/api/admin/round2/questions', {
+            const response = await axios.get('https://codehunt-backend-xo52.onrender.com/api/admin/round2/questions', {
                 headers: { 'Authorization': `Bearer ${token}` }
             });
             setRound2Questions(response.data);
@@ -110,7 +110,7 @@ function AdminPanel() {
     const fetchResults = async () => {
         try {
             const token = localStorage.getItem('token');
-            const response = await axios.get('http://localhost:3001/api/admin/results', {
+            const response = await axios.get('https://codehunt-backend-xo52.onrender.com/api/admin/results', {
                 headers: { 'Authorization': `Bearer ${token}` }
             });
             setResults(response.data);
@@ -122,7 +122,7 @@ function AdminPanel() {
     const fetchCodingResults = async () => {
         try {
             const token = localStorage.getItem('token');
-            const response = await axios.get('http://localhost:3001/api/admin/coding-results', {
+            const response = await axios.get('https://codehunt-backend-xo52.onrender.com/api/admin/coding-results', {
                 headers: { 'Authorization': `Bearer ${token}` }
             });
             setCodingResults(response.data);
@@ -134,7 +134,7 @@ function AdminPanel() {
     const fetchTeams = async () => {
         try {
             const token = localStorage.getItem('token');
-            const response = await axios.get('http://localhost:3001/api/admin/teams', {
+            const response = await axios.get('https://codehunt-backend-xo52.onrender.com/api/admin/teams', {
                 headers: { 'Authorization': `Bearer ${token}` }
             });
             setTeams(response.data);
@@ -146,7 +146,7 @@ function AdminPanel() {
     const fetchSettings = async () => {
         try {
             const token = localStorage.getItem('token');
-            const response = await axios.get('http://localhost:3001/api/admin/settings', {
+            const response = await axios.get('https://codehunt-backend-xo52.onrender.com/api/admin/settings', {
                 headers: { 'Authorization': `Bearer ${token}` }
             });
 
@@ -211,7 +211,7 @@ function AdminPanel() {
 
             console.log('Submitting Round 1 question:', questionData);
 
-            const response = await axios.post('http://localhost:3001/api/admin/round1/questions',
+            const response = await axios.post('https://codehunt-backend-xo52.onrender.com/api/admin/round1/questions',
                 questionData,
                 { headers: { 'Authorization': `Bearer ${token}` } }
             );
@@ -244,7 +244,7 @@ function AdminPanel() {
         try {
             const token = localStorage.getItem('token');
 
-            const response = await axios.delete(`http://localhost:3001/api/admin/round1/questions/${questionId}`, {
+            const response = await axios.delete(`https://codehunt-backend-xo52.onrender.com/api/admin/round1/questions/${questionId}`, {
                 headers: { 'Authorization': `Bearer ${token}` }
             });
 
@@ -282,7 +282,7 @@ function AdminPanel() {
             // Delete each question one by one
             let deleted = 0;
             for (const question of round1Questions) {
-                await axios.delete(`http://localhost:3001/api/admin/round1/questions/${question.id}`, {
+                await axios.delete(`https://codehunt-backend-xo52.onrender.com/api/admin/round1/questions/${question.id}`, {
                     headers: { 'Authorization': `Bearer ${token}` }
                 });
                 deleted++;
@@ -344,7 +344,7 @@ function AdminPanel() {
 
             console.log('Submitting Round 2 question:', questionData);
 
-            const response = await axios.post('http://localhost:3001/api/admin/round2/questions',
+            const response = await axios.post('https://codehunt-backend-xo52.onrender.com/api/admin/round2/questions',
                 questionData,
                 { headers: { 'Authorization': `Bearer ${token}` } }
             );
@@ -392,7 +392,7 @@ function AdminPanel() {
 
         try {
             const token = localStorage.getItem('token');
-            const response = await axios.delete('http://localhost:3001/api/admin/delete-all-questions', {
+            const response = await axios.delete('https://codehunt-backend-xo52.onrender.com/api/admin/delete-all-questions', {
                 headers: { 'Authorization': `Bearer ${token}` }
             });
 
@@ -450,7 +450,7 @@ function AdminPanel() {
         try {
             const token = localStorage.getItem('token');
 
-            const response = await axios.delete(`http://localhost:3001/api/admin/round2/questions/${questionId}`, {
+            const response = await axios.delete(`https://codehunt-backend-xo52.onrender.com/api/admin/round2/questions/${questionId}`, {
                 headers: { 'Authorization': `Bearer ${token}` }
             });
 
@@ -489,7 +489,7 @@ function AdminPanel() {
             // Delete each question one by one
             let deleted = 0;
             for (const question of round2Questions) {
-                await axios.delete(`http://localhost:3001/api/admin/round2/questions/${question.id}`, {
+                await axios.delete(`https://codehunt-backend-xo52.onrender.com/api/admin/round2/questions/${question.id}`, {
                     headers: { 'Authorization': `Bearer ${token}` }
                 });
                 deleted++;
@@ -525,7 +525,7 @@ function AdminPanel() {
 
         try {
             const token = localStorage.getItem('token');
-            const response = await axios.post('http://localhost:3001/api/admin/create-team', {
+            const response = await axios.post('https://codehunt-backend-xo52.onrender.com/api/admin/create-team', {
                 teamCode: teamCode.toUpperCase(),
                 teamName,
                 password: teamPassword
@@ -560,7 +560,7 @@ function AdminPanel() {
 
         try {
             const token = localStorage.getItem('token');
-            const response = await axios.post('http://localhost:3001/api/admin/set-round1-password',
+            const response = await axios.post('https://codehunt-backend-xo52.onrender.com/api/admin/set-round1-password',
                 { newPassword: round1Password },
                 { headers: { 'Authorization': `Bearer ${token}` } }
             );
@@ -588,7 +588,7 @@ function AdminPanel() {
 
         try {
             const token = localStorage.getItem('token');
-            const response = await axios.post('http://localhost:3001/api/admin/set-round2-password',
+            const response = await axios.post('https://codehunt-backend-xo52.onrender.com/api/admin/set-round2-password',
                 { newPassword: round2Password },
                 { headers: { 'Authorization': `Bearer ${token}` } }
             );

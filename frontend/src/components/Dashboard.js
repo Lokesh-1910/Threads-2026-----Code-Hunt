@@ -34,7 +34,7 @@ function Dashboard() {
                 if (token) {
                     try {
                         // Add cache-busting parameter
-                        const response = await axios.get('http://localhost:3001/api/team/details?_=' + Date.now(), {
+                        const response = await axios.get('https://codehunt-backend-xo52.onrender.com/api/team/details?_=' + Date.now(), {
                             headers: { 'Authorization': `Bearer ${token}` }
                         });
 
@@ -45,7 +45,7 @@ function Dashboard() {
                             setTeamDetails(teamData);
 
                             // CRITICAL: Check if team has members registered
-                            const membersResponse = await axios.get('http://localhost:3001/api/team/members', {
+                            const membersResponse = await axios.get('https://codehunt-backend-xo52.onrender.com/api/team/members', {
                                 headers: { 'Authorization': `Bearer ${token}` }
                             });
 
@@ -100,7 +100,7 @@ function Dashboard() {
     // Add this new function to check team members
     const checkTeamMembers = async (token) => {
         try {
-            const response = await axios.get('http://localhost:3001/api/team/members', {
+            const response = await axios.get('https://codehunt-backend-xo52.onrender.com/api/team/members', {
                 headers: { 'Authorization': `Bearer ${token}` }
             });
             return response.data.hasMembers || false;
@@ -119,7 +119,7 @@ function Dashboard() {
         try {
             const token = localStorage.getItem('token');
 
-            const response = await axios.post('http://localhost:3001/api/round1/start', {
+            const response = await axios.post('https://codehunt-backend-xo52.onrender.com/api/round1/start', {
                 roundPassword: round1Password
             }, {
                 headers: { 'Authorization': `Bearer ${token}` }
@@ -149,7 +149,7 @@ function Dashboard() {
         try {
             const token = localStorage.getItem('token');
 
-            const response = await axios.post('http://localhost:3001/api/round2/start', {
+            const response = await axios.post('https://codehunt-backend-xo52.onrender.com/api/round2/start', {
                 roundPassword: round2Password
             }, {
                 headers: { 'Authorization': `Bearer ${token}` }

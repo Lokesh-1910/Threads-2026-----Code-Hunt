@@ -29,7 +29,7 @@ function Round1Quiz() {
             const sessionId = localStorage.getItem('sessionId');
             const token = localStorage.getItem('token');
 
-            await axios.post('http://localhost:3001/api/round1/log-activity', {
+            await axios.post('https://codehunt-backend-xo52.onrender.com/api/round1/log-activity', {
                 sessionId,
                 activityType,
                 details: JSON.stringify(details),
@@ -397,7 +397,7 @@ function Round1Quiz() {
     const fetchQuestions = async () => {
         try {
             const token = localStorage.getItem('token');
-            const response = await axios.get('http://localhost:3001/api/round1/questions', {
+            const response = await axios.get('https://codehunt-backend-xo52.onrender.com/api/round1/questions', {
                 headers: { 'Authorization': `Bearer ${token}` }
             });
             setQuestions(response.data);
@@ -462,7 +462,7 @@ function Round1Quiz() {
             // Submit all answers
             for (const question of questions) {
                 const selectedAnswer = answers[question.id] || '';
-                await axios.post('http://localhost:3001/api/round1/submit-answer', {
+                await axios.post('https://codehunt-backend-xo52.onrender.com/api/round1/submit-answer', {
                     sessionId,
                     questionId: question.id,
                     selectedAnswer
@@ -472,7 +472,7 @@ function Round1Quiz() {
             }
 
             // Complete quiz
-            const completeResponse = await axios.post('http://localhost:3001/api/round1/complete', {
+            const completeResponse = await axios.post('https://codehunt-backend-xo52.onrender.com/api/round1/complete', {
                 sessionId,
                 feedback: '',
                 cheatScore: cheatScore,

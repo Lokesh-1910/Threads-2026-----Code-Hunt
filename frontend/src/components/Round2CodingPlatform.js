@@ -112,7 +112,7 @@ int main() {
             const sessionId = localStorage.getItem('round2SessionId');
             const token = localStorage.getItem('token');
 
-            await axios.post('http://localhost:3001/api/round2/log-activity', {
+            await axios.post('https://codehunt-backend-xo52.onrender.com/api/round2/log-activity', {
                 sessionId,
                 activityType,
                 details: JSON.stringify(details),
@@ -395,7 +395,7 @@ int main() {
         const startRoundSession = async () => {
             try {
                 const token = localStorage.getItem('token');
-                const response = await axios.post('http://localhost:3001/api/round2/start', {}, {
+                const response = await axios.post('https://codehunt-backend-xo52.onrender.com/api/round2/start', {}, {
                     headers: { 'Authorization': `Bearer ${token}` }
                 });
                 localStorage.setItem('round2SessionId', response.data.sessionId);
@@ -419,7 +419,7 @@ int main() {
         try {
             const token = localStorage.getItem('token');
             const response = await axios.get(
-                `http://localhost:3001/api/round2/questions/${questionId}`,
+                `https://codehunt-backend-xo52.onrender.com/api/round2/questions/${questionId}`,
                 { headers: { 'Authorization': `Bearer ${token}` } }
             );
             setQuestion(response.data);
@@ -433,7 +433,7 @@ int main() {
         try {
             const token = localStorage.getItem('token');
             const response = await axios.get(
-                `http://localhost:3001/api/round2/submissions/${questionId}`,
+                `https://codehunt-backend-xo52.onrender.com/api/round2/submissions/${questionId}`,
                 { headers: { 'Authorization': `Bearer ${token}` } }
             );
             setSubmissions(response.data);
@@ -457,7 +457,7 @@ int main() {
             const sessionId = localStorage.getItem('round2SessionId');
 
             const response = await axios.post(
-                'http://localhost:3001/api/round2/submit',
+                'https://codehunt-backend-xo52.onrender.com/api/round2/submit',
                 {
                     questionId: parseInt(questionId),
                     language,
@@ -505,7 +505,7 @@ int main() {
             const token = localStorage.getItem('token');
 
             const response = await axios.post(
-                'http://localhost:3001/api/round2/run',
+                'https://codehunt-backend-xo52.onrender.com/api/round2/run',
                 {
                     questionId: parseInt(questionId),
                     language,

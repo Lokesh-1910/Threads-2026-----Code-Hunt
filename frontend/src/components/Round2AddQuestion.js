@@ -126,7 +126,7 @@ const Round2AddQuestion = ({ onQuestionAdded }) => {
             console.log('📤 Submitting question:', questionData);
 
             const response = await axios.post(
-                'http://localhost:3001/api/admin/round2/questions',
+                'https://codehunt-backend-xo52.onrender.com/api/admin/round2/questions',
                 questionData,
                 { 
                     headers: { 

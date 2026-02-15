@@ -21,13 +21,13 @@ function Leaderboard() {
             const token = localStorage.getItem('token');
             
             // Fetch overall leaderboard (Round 1 + Round 2)
-            const overallResponse = await axios.get('http://localhost:3001/api/round2/leaderboard', {
+            const overallResponse = await axios.get('https://codehunt-backend-xo52.onrender.com/api/round2/leaderboard', {
                 headers: { 'Authorization': `Bearer ${token}` }
             });
             setLeaderboard(overallResponse.data);
 
             // Fetch Round 2 specific leaderboard
-            const round2Response = await axios.get('http://localhost:3001/api/round2/leaderboard/round2', {
+            const round2Response = await axios.get('https://codehunt-backend-xo52.onrender.com/api/round2/leaderboard/round2', {
                 headers: { 'Authorization': `Bearer ${token}` }
             });
             setRound2Leaderboard(round2Response.data);

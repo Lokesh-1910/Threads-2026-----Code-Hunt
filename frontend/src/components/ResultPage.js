@@ -46,7 +46,7 @@ function ResultPage() {
         setLoading(true);
         try {
             const token = localStorage.getItem('token');
-            const response = await axios.get('http://localhost:3001/api/round2/results', {
+            const response = await axios.get('https://codehunt-backend-xo52.onrender.com/api/round2/results', {
                 headers: { 'Authorization': `Bearer ${token}` }
             });
             
@@ -67,7 +67,7 @@ function ResultPage() {
             const token = localStorage.getItem('token');
             const sessionId = localStorage.getItem('sessionId');
             
-            await axios.post('http://localhost:3001/api/feedback/submit', {
+            await axios.post('https://codehunt-backend-xo52.onrender.com/api/feedback/submit', {
                 round: round,
                 feedback: feedback,
                 sessionId: sessionId

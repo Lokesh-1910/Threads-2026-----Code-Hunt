@@ -194,7 +194,7 @@ function TeamRegistration() {
                 members: validMembers
             });
 
-            const response = await axios.post('http://localhost:3001/api/teams/register', {
+            const response = await axios.post('https://codehunt-backend-xo52.onrender.com/api/teams/register', {
                 teamName,
                 members: validMembers
             }, {
