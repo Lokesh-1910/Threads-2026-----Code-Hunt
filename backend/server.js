@@ -419,8 +419,22 @@ app.post('/api/admin/round2/questions', authenticateToken, verifyAdmin, async (r
         test_cases 
     } = req.body;
 
+    // ✅ FIX: Format difficulty to match database constraint
+    const validDifficulties = ['Easy', 'Medium', 'Hard'];
+    let formattedDifficulty = difficulty;
     
-
+    // Convert if it's lowercase
+    if (difficulty === 'easy') formattedDifficulty = 'Easy';
+    else if (difficulty === 'medium') formattedDifficulty = 'Medium';
+    else if (difficulty === 'hard') formattedDifficulty = 'Hard';
+    
+    // Validate difficulty is one of the allowed values
+    if (!validDifficulties.includes(formattedDifficulty)) {
+        return res.status(400).json({
+            error: 'Invalid difficulty value. Must be Easy, Medium, or Hard'
+        });
+    }
+    
     const client = await pool.connect();
 
     try {
