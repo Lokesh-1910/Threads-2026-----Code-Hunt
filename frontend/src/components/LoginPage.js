@@ -2,6 +2,79 @@ import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import axios from 'axios';
 
+const WAKE_UP_URL = 'https://codehunt-backend-xo52.onrender.com/api/db-test';
+
+// This runs once when component loads
+useEffect(() => {
+    const wakeUpBackend = async () => {
+        try {
+            console.log('⏰ Waking up backend...');
+            
+            // Simple fetch to ping backend
+            const response = await fetch(WAKE_UP_URL, {
+                method: 'GET',
+                mode: 'cors',
+                cache: 'no-cache'
+            });
+            
+            if (response.ok) {
+                console.log('✅ Backend is awake!');
+            } else {
+                console.log('⚠️ Backend responded with status:', response.status);
+            }
+        } catch (error) {
+            // This is normal if backend was sleeping
+            console.log('⏳ Backend is waking up... (this takes 30-50 seconds)');
+            
+            // Try again after 2 seconds
+            setTimeout(() => {
+                fetch(WAKE_UP_URL)
+                    .then(() => console.log('✅ Backend now awake'))
+                    .catch(() => console.log('Still waking...'));
+            }, 2000);
+        }
+    };
+
+    wakeUpBackend();
+}, []); 
+
+// Add this state near your other useState declarations
+const [wakingBackend, setWakingBackend] = useState(false);
+
+// Update the wake-up script:
+useEffect(() => {
+    const wakeUpBackend = async () => {
+        setWakingBackend(true);
+        try {
+            await fetch(WAKE_UP_URL);
+            setWakingBackend(false);
+        } catch (error) {
+            setTimeout(() => {
+                fetch(WAKE_UP_URL)
+                    .then(() => setWakingBackend(false))
+                    .catch(() => setWakingBackend(true));
+            }, 2000);
+        }
+    };
+    wakeUpBackend();
+}, []);
+
+// Add this in your return statement (near the error message)
+{
+    wakingBackend && (
+        <div style={{
+            background: '#fef3c7',
+            border: '2px solid #f59e0b',
+            borderRadius: '10px',
+            padding: '10px',
+            marginBottom: '15px',
+            textAlign: 'center',
+            color: '#92400e'
+        }}>
+            ⏳ Waking up server... Please wait (max 30 seconds)
+        </div>
+    )
+}
 function LoginPage() {
     const [teamCode, setTeamCode] = useState('');
     const [password, setPassword] = useState('');
