@@ -405,18 +405,18 @@ app.get('/api/admin/round2/questions', authenticateToken, verifyAdmin, async (re
 });
 
 // POST new Round 2 question (Coding)
-// POST new Round 2 question (Coding)
+// POST new Round 2 question (Coding) - COMPLETELY FIXED VERSION
 app.post('/api/admin/round2/questions', authenticateToken, verifyAdmin, async (req, res) => {
-    const {
-        title,
-        difficulty,
+    const { 
+        title, 
+        difficulty, 
         problem_statement,
-        description,  // Add this to accept both
-        sample_input,
-        sample_output,
-        points,
+        description,
+        sample_input, 
+        sample_output, 
+        points, 
         time_limit,
-        test_cases
+        test_cases 
     } = req.body;
 
     const client = await pool.connect();
@@ -424,12 +424,19 @@ app.post('/api/admin/round2/questions', authenticateToken, verifyAdmin, async (r
     try {
         await client.query('BEGIN');
 
-        // Use either problem_statement or description
-        const problemText = problem_statement || description;
+        // Use description if provided, otherwise use problem_statement
+        const finalDescription = description || problem_statement;
 
         // Validate required fields
-        if (!title || !difficulty || !problemText) {
-            return res.status(400).json({ error: 'Missing required fields' });
+        if (!title || !difficulty || !finalDescription) {
+            return res.status(400).json({ 
+                error: 'Missing required fields',
+                details: {
+                    title: !title,
+                    difficulty: !difficulty,
+                    description: !finalDescription
+                }
+            });
         }
 
         // Check which columns exist in your table
@@ -438,34 +445,72 @@ app.post('/api/admin/round2/questions', authenticateToken, verifyAdmin, async (r
             FROM information_schema.columns 
             WHERE table_name = 'round2_questions'
         `);
-
+        
         const columns = tableInfo.rows.map(row => row.column_name);
-        console.log('Available columns:', columns);
+        console.log('📊 Available columns:', columns);
 
-        let questionResult;
+        // ✅ FIXED: Using different variable names throughout
+        
+        // Build insert query based on available columns
+        const insertColumns = [];
+        const insertValues = [];
+        const placeholders = [];
+        let valueIndex = 1;
 
-        // Dynamic insert based on available columns
-        if (columns.includes('problem_statement')) {
-            questionResult = await client.query(
-                `INSERT INTO round2_questions 
-                 (title, difficulty, problem_statement, sample_input, sample_output, points, time_limit) 
-                 VALUES ($1, $2, $3, $4, $5, $6, $7) 
-                 RETURNING id`,
-                [title, difficulty, problemText, sample_input, sample_output, points || 5, time_limit || 30]
-            );
-        } else if (columns.includes('description')) {
-            questionResult = await client.query(
-                `INSERT INTO round2_questions 
-                 (title, difficulty, description, sample_input, sample_output, points, time_limit) 
-                 VALUES ($1, $2, $3, $4, $5, $6, $7) 
-                 RETURNING id`,
-                [title, difficulty, problemText, sample_input, sample_output, points || 5, time_limit || 30]
-            );
-        } else {
-            throw new Error('Neither problem_statement nor description column found in round2_questions table');
+        // Always include these
+        insertColumns.push('title', 'difficulty');
+        insertValues.push(title, difficulty);
+        placeholders.push(`$${valueIndex++}`, `$${valueIndex++}`);
+
+        // Handle description/problem_statement
+        if (columns.includes('description')) {
+            insertColumns.push('description');
+            insertValues.push(finalDescription);
+            placeholders.push(`$${valueIndex++}`);
+        } else if (columns.includes('problem_statement')) {
+            insertColumns.push('problem_statement');
+            insertValues.push(finalDescription);
+            placeholders.push(`$${valueIndex++}`);
         }
 
-        const questionId = questionResult.rows[0].id;
+        // Add optional fields if they exist
+        if (sample_input && columns.includes('sample_input')) {
+            insertColumns.push('sample_input');
+            insertValues.push(sample_input);
+            placeholders.push(`$${valueIndex++}`);
+        }
+        
+        if (sample_output && columns.includes('sample_output')) {
+            insertColumns.push('sample_output');
+            insertValues.push(sample_output);
+            placeholders.push(`$${valueIndex++}`);
+        }
+        
+        if (points && columns.includes('points')) {
+            insertColumns.push('points');
+            insertValues.push(points);
+            placeholders.push(`$${valueIndex++}`);
+        }
+        
+        if (time_limit && columns.includes('time_limit')) {
+            insertColumns.push('time_limit');
+            insertValues.push(time_limit);
+            placeholders.push(`$${valueIndex++}`);
+        }
+
+        // Construct and execute query
+        const query = `
+            INSERT INTO round2_questions (${insertColumns.join(', ')}) 
+            VALUES (${placeholders.join(', ')}) 
+            RETURNING id
+        `;
+
+        console.log('📝 Insert query:', query);
+        console.log('📝 Insert values:', insertValues);
+
+        // ✅ FIXED: Using insertResult instead of questionResult
+        const insertResult = await client.query(query, insertValues);
+        const newQuestionId = insertResult.rows[0].id;
 
         // Insert test cases
         if (test_cases && test_cases.length > 0) {
@@ -475,7 +520,7 @@ app.post('/api/admin/round2/questions', authenticateToken, verifyAdmin, async (r
                     `INSERT INTO test_cases 
                      (question_id, input_data, expected_output, is_hidden, order_number) 
                      VALUES ($1, $2, $3, $4, $5)`,
-                    [questionId, tc.input, tc.output, tc.isHidden || false, i]
+                    [newQuestionId, tc.input, tc.output, tc.isHidden || false, i]
                 );
             }
         }
@@ -484,19 +529,23 @@ app.post('/api/admin/round2/questions', authenticateToken, verifyAdmin, async (r
 
         res.json({
             success: true,
-            questionId: questionId,
-            message: 'Round 2 coding question added successfully!'
+            questionId: newQuestionId,
+            message: 'Round 2 coding question added successfully!',
+            testcasesCount: test_cases?.length || 0
         });
 
     } catch (error) {
         await client.query('ROLLBACK');
-        console.error('Error adding round2 question:', error);
-        res.status(500).json({ error: error.message });
+        console.error('❌ Error adding round2 question:', error);
+        res.status(500).json({ 
+            success: false,
+            error: error.message,
+            detail: error.detail
+        });
     } finally {
         client.release();
     }
 });
-
 // DELETE Round 2 question
 app.delete('/api/admin/round2/questions/:id', authenticateToken, verifyAdmin, async (req, res) => {
     const questionId = parseInt(req.params.id);
