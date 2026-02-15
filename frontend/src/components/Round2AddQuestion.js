@@ -24,7 +24,7 @@ const Round2AddQuestion = ({ onQuestionAdded }) => {
     const handleInputChange = (e) => {
         const { name, value } = e.target;
         setFormData({ ...formData, [name]: value });
-        
+
         // Auto-set points based on difficulty
         if (name === 'difficulty') {
             const pointsMap = {
@@ -32,10 +32,10 @@ const Round2AddQuestion = ({ onQuestionAdded }) => {
                 'medium': 10,
                 'hard': 15
             };
-            setFormData(prev => ({ 
-                ...prev, 
+            setFormData(prev => ({
+                ...prev,
                 difficulty: value,
-                points: pointsMap[value] || 5 
+                points: pointsMap[value] || 5
             }));
         }
     };
@@ -105,11 +105,12 @@ const Round2AddQuestion = ({ onQuestionAdded }) => {
 
         try {
             const token = localStorage.getItem('token');
-            
+
             // Prepare data for API
             const questionData = {
                 title: formData.title,
-                difficulty: formData.difficulty,
+                difficulty: formData.difficulty === 'easy' ? 'Easy' : 
+                            formData.difficulty === 'medium' ? 'Medium' : 'Hard',
                 problem_statement: formData.problem_statement,
                 description: formData.problem_statement,
                 sample_input: formData.sample_input,
@@ -128,20 +129,20 @@ const Round2AddQuestion = ({ onQuestionAdded }) => {
             const response = await axios.post(
                 'https://codehunt-backend-xo52.onrender.com/api/admin/round2/questions',
                 questionData,
-                { 
-                    headers: { 
+                {
+                    headers: {
                         'Authorization': `Bearer ${token}`,
                         'Content-Type': 'application/json'
-                    } 
+                    }
                 }
             );
 
             if (response.data.success) {
                 const sampleCount = formData.test_cases.filter(tc => !tc.isHidden).length;
                 const hiddenCount = formData.test_cases.filter(tc => tc.isHidden).length;
-                
+
                 setSuccess(`✅ Question added successfully!\n\n📊 Statistics:\n• Question ID: ${response.data.questionId}\n• Difficulty: ${formData.difficulty.toUpperCase()}\n• Points: ${formData.points}\n• Sample Tests: ${sampleCount}\n• Hidden Tests: ${hiddenCount}`);
-                
+
                 // Reset form
                 setFormData({
                     title: '',
@@ -155,7 +156,7 @@ const Round2AddQuestion = ({ onQuestionAdded }) => {
                         { input: '', output: '', isHidden: false }
                     ]
                 });
-                
+
                 // Notify parent component
                 if (onQuestionAdded) {
                     onQuestionAdded();
@@ -163,7 +164,7 @@ const Round2AddQuestion = ({ onQuestionAdded }) => {
             }
         } catch (error) {
             console.error('❌ Error adding question:', error);
-            
+
             let errorMessage = 'Failed to add question';
             if (error.response?.data?.error) {
                 errorMessage = error.response.data.error;
@@ -173,7 +174,7 @@ const Round2AddQuestion = ({ onQuestionAdded }) => {
             } else if (error.message) {
                 errorMessage = error.message;
             }
-            
+
             setError(`❌ ${errorMessage}`);
         } finally {
             setLoading(false);
@@ -221,20 +222,20 @@ Because nums[0] + nums[1] == 9, we return [0, 1].`,
             points: 5,
             time_limit: 30,
             test_cases: [
-                { 
-                    input: '4\n2 7 11 15\n9', 
-                    output: '0 1', 
-                    isHidden: false 
+                {
+                    input: '4\n2 7 11 15\n9',
+                    output: '0 1',
+                    isHidden: false
                 },
-                { 
-                    input: '3\n3 2 4\n6', 
-                    output: '1 2', 
-                    isHidden: true 
+                {
+                    input: '3\n3 2 4\n6',
+                    output: '1 2',
+                    isHidden: true
                 },
-                { 
-                    input: '2\n3 3\n6', 
-                    output: '0 1', 
-                    isHidden: true 
+                {
+                    input: '2\n3 3\n6',
+                    output: '0 1',
+                    isHidden: true
                 }
             ]
         });
@@ -242,16 +243,16 @@ Because nums[0] + nums[1] == 9, we return [0, 1].`,
 
     return (
         <div className="admin-section" style={{ maxWidth: '1000px', margin: '0 auto' }}>
-            <div style={{ 
-                display: 'flex', 
-                justifyContent: 'space-between', 
+            <div style={{
+                display: 'flex',
+                justifyContent: 'space-between',
                 alignItems: 'center',
                 marginBottom: '30px',
                 flexWrap: 'wrap',
                 gap: '15px'
             }}>
-                <h2 style={{ 
-                    fontSize: '28px', 
+                <h2 style={{
+                    fontSize: '28px',
                     fontWeight: '700',
                     background: 'linear-gradient(135deg, #f59e0b 0%, #dc2626 100%)',
                     WebkitBackgroundClip: 'text',
@@ -260,7 +261,7 @@ Because nums[0] + nums[1] == 9, we return [0, 1].`,
                 }}>
                     ➕ Add Round 2 Coding Question
                 </h2>
-                
+
                 <button
                     type="button"
                     onClick={fillSampleData}
@@ -628,8 +629,8 @@ Because nums[0] + nums[1] == 9, we return [0, 1].`,
                             </div>
 
                             <div style={{ marginTop: '10px', fontSize: '13px', color: testCase.isHidden ? '#b45309' : '#047857' }}>
-                                {testCase.isHidden 
-                                    ? '🔒 This test case will NOT be visible to participants' 
+                                {testCase.isHidden
+                                    ? '🔒 This test case will NOT be visible to participants'
                                     : '👁️ This test case will be visible to participants as an example'}
                             </div>
                         </div>
