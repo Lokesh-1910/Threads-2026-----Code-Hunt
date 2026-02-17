@@ -44,20 +44,23 @@ const verifyAdmin = (req, res, next) => {
 // ============ CREATE TABLES IF NOT EXISTS ============
 const createRound2Tables = async () => {
     try {
-        // Round 2 Questions table
+        // Check if tables exist, create if not
         await pool.query(`
             CREATE TABLE IF NOT EXISTS round2_questions (
                 id SERIAL PRIMARY KEY,
                 title VARCHAR(255) NOT NULL,
                 description TEXT NOT NULL,
-                difficulty VARCHAR(50) CHECK (difficulty IN ('Easy', 'Medium', 'Hard')),
+                difficulty VARCHAR(50) CHECK (difficulty IN ('Easy', 'Medium', 'Hard', 'easy', 'medium', 'hard', 'EASY', 'MEDIUM', 'HARD')),
                 time_limit INT DEFAULT 30,
                 memory_limit INT DEFAULT 256,
+                points INT DEFAULT 5,
+                sample_input TEXT,
+                sample_output TEXT,
+                problem_statement TEXT,
                 created_at TIMESTAMP DEFAULT NOW()
             )
         `);
 
-        // Round 2 Test Cases table
         await pool.query(`
             CREATE TABLE IF NOT EXISTS round2_testcases (
                 id SERIAL PRIMARY KEY,
@@ -66,11 +69,11 @@ const createRound2Tables = async () => {
                 expected_output TEXT NOT NULL,
                 is_hidden BOOLEAN DEFAULT TRUE,
                 score INT DEFAULT 5,
+                order_number INT DEFAULT 0,
                 created_at TIMESTAMP DEFAULT NOW()
             )
         `);
 
-        // Round 2 Submissions table
         await pool.query(`
             CREATE TABLE IF NOT EXISTS round2_submissions (
                 id SERIAL PRIMARY KEY,
@@ -88,7 +91,6 @@ const createRound2Tables = async () => {
             )
         `);
 
-        // Round 2 Test Case Results table
         await pool.query(`
             CREATE TABLE IF NOT EXISTS round2_testcase_results (
                 id SERIAL PRIMARY KEY,
@@ -102,7 +104,6 @@ const createRound2Tables = async () => {
             )
         `);
 
-        // Round 2 Sessions table
         await pool.query(`
             CREATE TABLE IF NOT EXISTS round2_sessions (
                 id SERIAL PRIMARY KEY,
@@ -111,7 +112,19 @@ const createRound2Tables = async () => {
                 end_time TIMESTAMP,
                 status VARCHAR(50) DEFAULT 'in_progress',
                 total_score INT DEFAULT 0,
-                questions_attempted INT DEFAULT 0
+                questions_attempted INT DEFAULT 0,
+                cheat_score INT DEFAULT 0
+            )
+        `);
+
+        await pool.query(`
+            CREATE TABLE IF NOT EXISTS round2_cheat_logs (
+                id SERIAL PRIMARY KEY,
+                session_id VARCHAR(100),
+                team_id INT,
+                activity_type VARCHAR(50),
+                details TEXT,
+                created_at TIMESTAMP DEFAULT NOW()
             )
         `);
 
@@ -128,7 +141,7 @@ createRound2Tables();
 
 // 1. Add Round 2 Question with Test Cases
 router.post('/admin/questions', authenticateToken, verifyAdmin, async (req, res) => {
-    const { title, description, difficulty, time_limit, memory_limit, testcases } = req.body;
+    const { title, description, difficulty, time_limit, memory_limit, testcases, points, sample_input, sample_output, problem_statement } = req.body;
     
     const client = await pool.connect();
     
@@ -144,28 +157,35 @@ router.post('/admin/questions', authenticateToken, verifyAdmin, async (req, res)
             return res.status(400).json({ error: 'At least one test case required' });
         }
 
+        // Format difficulty
+        let formattedDifficulty = difficulty;
+        if (difficulty === 'easy') formattedDifficulty = 'Easy';
+        else if (difficulty === 'medium') formattedDifficulty = 'Medium';
+        else if (difficulty === 'hard') formattedDifficulty = 'Hard';
+
         // Insert question
         const questionResult = await client.query(
             `INSERT INTO round2_questions 
-             (title, description, difficulty, time_limit, memory_limit) 
-             VALUES ($1, $2, $3, $4, $5) 
+             (title, description, difficulty, time_limit, memory_limit, points, sample_input, sample_output, problem_statement) 
+             VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9) 
              RETURNING id`,
-            [title, description, difficulty, time_limit || 30, memory_limit || 256]
+            [title, description, formattedDifficulty, time_limit || 30, memory_limit || 256, points || 5, sample_input || '', sample_output || '', problem_statement || description]
         );
         
         const questionId = questionResult.rows[0].id;
         
         // Insert test cases
-        for (const tc of testcases) {
+        for (let i = 0; i < testcases.length; i++) {
+            const tc = testcases[i];
             if (!tc.input || !tc.expected_output) {
                 throw new Error('Test case missing input or expected output');
             }
             
             await client.query(
                 `INSERT INTO round2_testcases 
-                 (question_id, input, expected_output, is_hidden, score) 
-                 VALUES ($1, $2, $3, $4, $5)`,
-                [questionId, tc.input, tc.expected_output, tc.is_hidden || true, tc.score || 5]
+                 (question_id, input, expected_output, is_hidden, score, order_number) 
+                 VALUES ($1, $2, $3, $4, $5, $6)`,
+                [questionId, tc.input, tc.expected_output, tc.is_hidden || false, tc.score || 5, i]
             );
         }
         
@@ -195,7 +215,7 @@ router.get('/admin/questions', authenticateToken, verifyAdmin, async (req, res) 
         const questions = await pool.query(`
             SELECT q.*, 
                    COUNT(t.id) as testcases_count,
-                   SUM(t.score) as total_score,
+                   COALESCE(SUM(t.score), 0) as total_score,
                    SUM(CASE WHEN t.is_hidden = false THEN 1 ELSE 0 END) as sample_count,
                    SUM(CASE WHEN t.is_hidden = true THEN 1 ELSE 0 END) as hidden_count
             FROM round2_questions q
@@ -230,7 +250,7 @@ router.get('/admin/questions/:id', authenticateToken, verifyAdmin, async (req, r
         }
         
         const testcases = await pool.query(
-            'SELECT * FROM round2_testcases WHERE question_id = $1 ORDER BY id',
+            'SELECT * FROM round2_testcases WHERE question_id = $1 ORDER BY order_number',
             [req.params.id]
         );
         
@@ -277,14 +297,6 @@ router.post('/start', authenticateToken, async (req, res) => {
             return res.status(403).json({ error: 'Complete Round 1 first' });
         }
         
-        // Check round 2 password from settings
-        const settings = await pool.query(
-            'SELECT setting_value FROM settings WHERE setting_key = $1',
-            ['round2_password']
-        );
-        
-        const round2Password = settings.rows[0]?.setting_value || process.env.ROUND2_PASSWORD;
-        
         // Create or get session
         const session = await pool.query(
             `INSERT INTO round2_sessions (team_id, start_time, status) 
@@ -313,9 +325,9 @@ router.get('/questions', authenticateToken, async (req, res) => {
         const questions = await pool.query(`
             SELECT 
                 q.id, q.title, q.description, q.difficulty, 
-                q.time_limit, q.memory_limit,
+                q.time_limit, q.memory_limit, q.points,
                 COUNT(t.id) as testcases_count,
-                SUM(t.score) as total_score,
+                COALESCE(SUM(t.score), 0) as total_score,
                 CASE 
                     WHEN s.id IS NOT NULL AND s.status = 'Accepted' THEN 'Solved'
                     WHEN s.id IS NOT NULL THEN 'Attempted'
@@ -347,43 +359,50 @@ router.get('/questions', authenticateToken, async (req, res) => {
     }
 });
 
-// 7. Get Single Question with Sample Test Cases (Hidden cases hidden)
+// 7. Get Single Question with Sample Test Cases
 router.get('/questions/:id', authenticateToken, async (req, res) => {
+    const questionId = parseInt(req.params.id);
+    
+    if (isNaN(questionId)) {
+        return res.status(400).json({ error: 'Invalid question ID' });
+    }
+
     try {
         const question = await pool.query(
             'SELECT * FROM round2_questions WHERE id = $1',
-            [req.params.id]
+            [questionId]
         );
         
         if (question.rows.length === 0) {
             return res.status(404).json({ error: 'Question not found' });
         }
         
-        // Get ONLY sample test cases (non-hidden) for participants
+        // Get sample test cases (non-hidden)
         const testcases = await pool.query(
             `SELECT id, input, expected_output, score 
              FROM round2_testcases 
              WHERE question_id = $1 AND is_hidden = false
-             ORDER BY id`,
-            [req.params.id]
+             ORDER BY order_number`,
+            [questionId]
         );
         
-        // Get total hidden test cases count and max score
+        // Get hidden test cases count
         const hiddenStats = await pool.query(
-            `SELECT COUNT(*) as count, SUM(score) as total_score 
+            `SELECT COUNT(*) as count, COALESCE(SUM(score), 0) as total_score 
              FROM round2_testcases 
              WHERE question_id = $1 AND is_hidden = true`,
-            [req.params.id]
+            [questionId]
         );
         
-        // Get previous submissions for this question
+        // Get previous submissions
         const submissions = await pool.query(
-            `SELECT status, total_score, passed_testcases, total_testcases, submitted_at
+            `SELECT status, total_score, passed_testcases, total_testcases, 
+                    submitted_at, execution_time
              FROM round2_submissions 
              WHERE team_id = $1 AND question_id = $2
              ORDER BY submitted_at DESC
              LIMIT 5`,
-            [req.user.teamId, req.params.id]
+            [req.user.teamId, questionId]
         );
         
         res.json({
@@ -400,9 +419,153 @@ router.get('/questions/:id', authenticateToken, async (req, res) => {
     }
 });
 
-// 8. Submit Code
-router.post('/submit', authenticateToken, async (req, res) => {
+// ============ COMPILER ROUTES (NEW) ============
+
+// 8. Compile Only - Check syntax, no execution
+router.post('/compile', authenticateToken, async (req, res) => {
+    const { language, code } = req.body;
+    
+    if (!language || !code) {
+        return res.status(400).json({ error: 'Missing required fields' });
+    }
+
+    try {
+        // Use Piston API to compile (run without input)
+        const result = await CodeExecutor.executeCode(language, code, '');
+        
+        // Check for compilation errors
+        if (result.stderr || result.error) {
+            return res.json({
+                success: false,
+                compilationError: result.stderr || result.error,
+                exitCode: result.code || 1
+            });
+        }
+
+        // No errors - compilation successful
+        res.json({
+            success: true,
+            message: 'Compilation successful',
+            warnings: result.stderr || '',
+            exitCode: 0
+        });
+
+    } catch (error) {
+        console.error('❌ Compilation error:', error);
+        res.status(500).json({ 
+            error: 'Compilation failed',
+            details: error.message 
+        });
+    }
+});
+
+// 9. Execute Code with User Input (Manual Testing)
+router.post('/execute', authenticateToken, async (req, res) => {
+    const { language, code, input } = req.body;
+    
+    if (!language || !code) {
+        return res.status(400).json({ error: 'Missing required fields' });
+    }
+
+    try {
+        const startTime = Date.now();
+        
+        // Execute code with provided input
+        const result = await CodeExecutor.executeCode(language, code, input || '');
+        
+        const executionTime = Date.now() - startTime;
+
+        // Check for runtime errors
+        if (result.error || result.stderr) {
+            return res.json({
+                success: false,
+                runtimeError: result.stderr || result.error,
+                stdout: result.stdout || '',
+                stderr: result.stderr || '',
+                exitCode: result.code || 1,
+                executionTime
+            });
+        }
+
+        // Successful execution
+        res.json({
+            success: true,
+            stdout: result.stdout || '',
+            stderr: result.stderr || '',
+            exitCode: result.code || 0,
+            executionTime
+        });
+
+    } catch (error) {
+        console.error('❌ Execution error:', error);
+        res.status(500).json({ 
+            error: 'Execution failed',
+            details: error.message 
+        });
+    }
+});
+
+// 10. Run Code with Sample Tests (Original Run - Enhanced)
+router.post('/run', authenticateToken, async (req, res) => {
     const { questionId, language, code } = req.body;
+    
+    if (!questionId || !language || !code) {
+        return res.status(400).json({ error: 'Missing required fields' });
+    }
+
+    try {
+        // Get sample test cases only
+        const testcases = await pool.query(
+            `SELECT input, expected_output, score 
+             FROM round2_testcases 
+             WHERE question_id = $1 AND is_hidden = false
+             ORDER BY order_number`,
+            [questionId]
+        );
+        
+        if (testcases.rows.length === 0) {
+            return res.status(404).json({ error: 'No sample test cases found' });
+        }
+
+        // Run code against all sample test cases
+        const results = [];
+        let passedCount = 0;
+
+        for (const tc of testcases.rows) {
+            const result = await CodeExecutor.executeCode(language, code, tc.input);
+            
+            const passed = !result.error && !result.stderr && 
+                          result.stdout?.trim() === tc.expected_output.trim();
+            
+            if (passed) passedCount++;
+
+            results.push({
+                passed,
+                input: tc.input,
+                expected_output: tc.expected_output,
+                actual_output: result.stdout || '',
+                error: result.stderr || result.error || null,
+                execution_time: result.execution_time || 0,
+                score: tc.score
+            });
+        }
+
+        res.json({
+            success: true,
+            passedCount,
+            totalTestCases: testcases.rows.length,
+            results
+        });
+
+    } catch (error) {
+        console.error('❌ Run error:', error);
+        res.status(500).json({ error: error.message });
+    }
+});
+
+// 11. Submit Code (Full Evaluation - Enhanced)
+router.post('/submit', authenticateToken, async (req, res) => {
+    const { questionId, language, code, sessionId } = req.body;
     const teamId = req.user.teamId;
     
     if (!questionId || !language || !code) {
@@ -410,21 +573,12 @@ router.post('/submit', authenticateToken, async (req, res) => {
     }
     
     try {
-        // Validate language
-        const isValidLanguage = await CodeExecutor.validateLanguage(language);
-        if (!isValidLanguage) {
-            return res.status(400).json({ 
-                error: 'Unsupported language', 
-                supported: CodeExecutor.getSupportedLanguages() 
-            });
-        }
-
-        // Get all test cases for this question
+        // Get ALL test cases (including hidden)
         const testcases = await pool.query(
             `SELECT id, input, expected_output, score, is_hidden 
              FROM round2_testcases 
              WHERE question_id = $1
-             ORDER BY id`,
+             ORDER BY order_number`,
             [questionId]
         );
         
@@ -444,107 +598,88 @@ router.post('/submit', authenticateToken, async (req, res) => {
         const submissionId = submissionResult.rows[0].id;
         
         // Execute code against all test cases
-        const executionResult = await CodeExecutor.runTestCases(
-            code, 
-            language, 
-            testcases.rows
-        );
-        
-        // Save test case results
-        for (let i = 0; i < executionResult.results.length; i++) {
-            const result = executionResult.results[i];
-            const testcase = testcases.rows[i];
+        const results = [];
+        let passedTests = 0;
+        let totalScore = 0;
+
+        for (const tc of testcases.rows) {
+            const result = await CodeExecutor.executeCode(language, code, tc.input);
             
+            const passed = !result.error && !result.stderr && 
+                          result.stdout?.trim() === tc.expected_output.trim();
+            
+            if (passed) {
+                passedTests++;
+                totalScore += tc.score;
+            }
+
+            // Save test case result
             await pool.query(
                 `INSERT INTO round2_testcase_results 
-                 (submission_id, testcase_id, passed, actual_output, execution_time, memory_used, error_message) 
-                 VALUES ($1, $2, $3, $4, $5, $6, $7)`,
+                 (submission_id, testcase_id, passed, actual_output, execution_time, error_message) 
+                 VALUES ($1, $2, $3, $4, $5, $6)`,
                 [
                     submissionId, 
-                    testcase.id, 
-                    result.passed, 
-                    result.actual_output || '', 
+                    tc.id, 
+                    passed, 
+                    result.stdout || '', 
                     result.execution_time || 0,
-                    result.memory || 0,
-                    result.error || null
+                    result.stderr || result.error || null
                 ]
             );
+
+            results.push({
+                passed,
+                score: tc.score,
+                is_hidden: tc.is_hidden,
+                execution_time: result.execution_time || 0,
+                ...(!tc.is_hidden && {
+                    expected_output: tc.expected_output,
+                    actual_output: result.stdout || ''
+                })
+            });
         }
         
-        // Update submission status
-        const allPassed = executionResult.passedCount === testcases.rows.length;
-        const status = allPassed ? 'Accepted' : 'Wrong Answer';
+        const status = passedTests === testcases.rows.length ? 'Accepted' : 'Wrong Answer';
         
+        // Update submission
         await pool.query(
             `UPDATE round2_submissions 
              SET status = $1, 
                  total_score = $2, 
                  passed_testcases = $3,
-                 execution_time = $4,
-                 memory_used = $5
-             WHERE id = $6`,
-            [
-                status,
-                executionResult.totalScore,
-                executionResult.passedCount,
-                executionResult.averageExecutionTime,
-                Math.max(...executionResult.results.map(r => r.memory || 0)),
-                submissionId
-            ]
+                 execution_time = $4
+             WHERE id = $5`,
+            [status, totalScore, passedTests, results.reduce((acc, r) => acc + (r.execution_time || 0), 0) / results.length, submissionId]
         );
         
-        // Update round2 session
+        // Update session
+        if (sessionId) {
+            await pool.query(
+                `UPDATE round2_sessions 
+                 SET total_score = total_score + $1,
+                     questions_attempted = questions_attempted + 1
+                 WHERE id = $2`,
+                [totalScore, sessionId]
+            );
+        }
+        
+        // Update team score
         await pool.query(
-            `INSERT INTO round2_sessions (team_id, start_time, status, total_score, questions_attempted)
-             VALUES ($1, NOW(), $2, $3, 1)
-             ON CONFLICT (team_id) DO UPDATE 
-             SET total_score = round2_sessions.total_score + $3,
-                 questions_attempted = round2_sessions.questions_attempted + 1,
-                 status = CASE 
-                    WHEN round2_sessions.questions_attempted + 1 >= (
-                        SELECT COUNT(*) FROM round2_questions
-                    ) THEN 'completed'
-                    ELSE 'in_progress'
-                 END
-             WHERE round2_sessions.team_id = $1`,
-            [teamId, status, executionResult.totalScore]
+            `UPDATE teams 
+             SET round2_score = round2_score + $1 
+             WHERE id = $2`,
+            [totalScore, teamId]
         );
-        
-        // Update team's overall round2 score
-        const totalScore = await pool.query(
-            'SELECT SUM(total_score) as total FROM round2_submissions WHERE team_id = $1 AND status = $2',
-            [teamId, 'Accepted']
-        );
-        
-        await pool.query(
-            'UPDATE teams SET round2_score = $1 WHERE id = $2',
-            [totalScore.rows[0].total || 0, teamId]
-        );
-        
-        // Prepare response (hide actual outputs for hidden test cases)
-        const visibleResults = executionResult.results.map((result, index) => ({
-            passed: result.passed,
-            score: result.score,
-            is_hidden: testcases.rows[index].is_hidden,
-            execution_time: result.execution_time,
-            memory: result.memory,
-            ...(!testcases.rows[index].is_hidden && {
-                expected_output: result.expected_output,
-                actual_output: result.actual_output
-            })
-        }));
-        
-        console.log(`✅ Submission ${submissionId}: ${executionResult.passedCount}/${testcases.rows.length} passed, Score: ${executionResult.totalScore}`);
         
         res.json({
             success: true,
             submissionId,
             status,
-            passedCount: executionResult.passedCount,
+            passedCount: passedTests,
             totalTestCases: testcases.rows.length,
-            totalScore: executionResult.totalScore,
-            averageExecutionTime: executionResult.averageExecutionTime,
-            results: visibleResults
+            totalScore,
+            results
         });
         
     } catch (error) {
@@ -553,130 +688,28 @@ router.post('/submit', authenticateToken, async (req, res) => {
     }
 });
 
-// 9. Run Code (Sample tests only)
-router.post('/run', authenticateToken, async (req, res) => {
-    const { questionId, language, code } = req.body;
-    
-    try {
-        // Get ONLY sample test cases
-        const testcases = await pool.query(
-            `SELECT id, input, expected_output, score 
-             FROM round2_testcases 
-             WHERE question_id = $1 AND is_hidden = false
-             ORDER BY id`,
-            [questionId]
-        );
-        
-        if (testcases.rows.length === 0) {
-            return res.status(404).json({ error: 'No sample test cases found' });
-        }
-        
-        // Execute code against sample test cases
-        const executionResult = await CodeExecutor.runTestCases(
-            code, 
-            language, 
-            testcases.rows
-        );
-        
-        // Prepare response
-        const results = executionResult.results.map((result, index) => ({
-            passed: result.passed,
-            expected_output: result.expected_output,
-            actual_output: result.actual_output,
-            execution_time: result.execution_time,
-            memory: result.memory
-        }));
-        
-        res.json({
-            success: true,
-            passedCount: executionResult.passedCount,
-            totalTestCases: testcases.rows.length,
-            results
-        });
-        
-    } catch (error) {
-        console.error('❌ Run error:', error);
-        res.status(500).json({ error: error.message });
-    }
-});
-
-// 10. Get Submission History
+// 12. Get Submission History
 router.get('/submissions/:questionId', authenticateToken, async (req, res) => {
+    const questionId = parseInt(req.params.questionId);
+    
+    if (isNaN(questionId)) {
+        return res.status(400).json({ error: 'Invalid question ID' });
+    }
+
     try {
         const submissions = await pool.query(
-            `SELECT s.*, 
-                    COUNT(tr.id) as results_count,
-                    SUM(CASE WHEN tr.passed THEN 1 ELSE 0 END) as passed_count
-             FROM round2_submissions s
-             LEFT JOIN round2_testcase_results tr ON s.id = tr.submission_id
-             WHERE s.team_id = $1 AND s.question_id = $2
-             GROUP BY s.id
-             ORDER BY s.submitted_at DESC
+            `SELECT id, status, total_score, passed_testcases, total_testcases, 
+                    submitted_at, execution_time
+             FROM round2_submissions 
+             WHERE team_id = $1 AND question_id = $2
+             ORDER BY submitted_at DESC
              LIMIT 10`,
-            [req.user.teamId, req.params.questionId]
+            [req.user.teamId, questionId]
         );
         
         res.json(submissions.rows);
     } catch (error) {
         console.error('❌ Error fetching submissions:', error);
-        res.status(500).json({ error: error.message });
-    }
-});
-
-// 11. Get Combined Leaderboard (Round 1 + Round 2)
-router.get('/leaderboard', async (req, res) => {
-    try {
-        const leaderboard = await pool.query(`
-            SELECT 
-                t.team_name,
-                t.leader_name,
-                t.college_name,
-                COALESCE(t.round1_score, 0) as round1_score,
-                COALESCE(t.round2_score, 0) as round2_score,
-                (COALESCE(t.round1_score, 0) + COALESCE(t.round2_score, 0)) as total_score,
-                CASE 
-                    WHEN t.round2_completed THEN 'Completed'
-                    WHEN t.round1_completed THEN 'Round 2 In Progress'
-                    WHEN t.round1_score > 0 THEN 'Round 1 Completed'
-                    ELSE 'Not Started'
-                END as status,
-                RANK() OVER (ORDER BY (COALESCE(t.round1_score, 0) + COALESCE(t.round2_score, 0)) DESC) as rank
-            FROM teams t
-            WHERE t.team_code != 'ADMIN001'
-            ORDER BY total_score DESC, t.team_name
-            LIMIT 50
-        `);
-        
-        res.json(leaderboard.rows);
-    } catch (error) {
-        console.error('❌ Error fetching leaderboard:', error);
-        res.status(500).json({ error: error.message });
-    }
-});
-
-// 12. Get Round 2 Leaderboard (Coding only)
-router.get('/leaderboard/round2', async (req, res) => {
-    try {
-        const leaderboard = await pool.query(`
-            SELECT 
-                t.team_name,
-                t.leader_name,
-                t.college_name,
-                t.round2_score,
-                rs.questions_attempted,
-                rs.start_time,
-                rs.end_time,
-                RANK() OVER (ORDER BY t.round2_score DESC, rs.start_time ASC) as rank
-            FROM teams t
-            JOIN round2_sessions rs ON t.id = rs.team_id
-            WHERE t.team_code != 'ADMIN001' AND t.round2_score > 0
-            ORDER BY t.round2_score DESC, rs.start_time ASC
-            LIMIT 50
-        `);
-        
-        res.json(leaderboard.rows);
-    } catch (error) {
-        console.error('❌ Error fetching round2 leaderboard:', error);
         res.status(500).json({ error: error.message });
     }
 });
@@ -689,78 +722,21 @@ router.post('/log-activity', authenticateToken, async (req, res) => {
         await pool.query(
             `INSERT INTO round2_cheat_logs (session_id, team_id, activity_type, details) 
              VALUES ($1, $2, $3, $4)`,
-            [sessionId, req.user.teamId, activityType, details]
+            [sessionId, req.user.teamId, activityType, details || '']
         );
         
-        // Update cheat score in session
-        await pool.query(
-            `UPDATE round2_sessions 
-             SET cheat_score = COALESCE(cheat_score, 0) + 1 
-             WHERE id = $1`,
-            [sessionId]
-        );
+        if (sessionId) {
+            await pool.query(
+                `UPDATE round2_sessions 
+                 SET cheat_score = COALESCE(cheat_score, 0) + 1 
+                 WHERE id = $1`,
+                [sessionId]
+            );
+        }
         
         res.json({ success: true });
     } catch (error) {
         console.error('❌ Error logging activity:', error);
-        res.status(500).json({ error: error.message });
-    }
-});
-
-// 14. Get Team Progress
-router.get('/progress', authenticateToken, async (req, res) => {
-    try {
-        const progress = await pool.query(`
-            SELECT 
-                COUNT(DISTINCT s.question_id) as attempted,
-                COUNT(DISTINCT q.id) as total,
-                SUM(CASE WHEN s.status = 'Accepted' THEN 1 ELSE 0 END) as solved,
-                COALESCE(SUM(s.total_score), 0) as earned_score,
-                COALESCE((
-                    SELECT SUM(score) 
-                    FROM round2_testcases 
-                    WHERE question_id IN (SELECT id FROM round2_questions)
-                ), 0) as total_score
-            FROM round2_questions q
-            LEFT JOIN round2_submissions s ON q.id = s.question_id 
-                AND s.team_id = $1 
-                AND s.status = 'Accepted'
-            GROUP BY s.team_id
-        `, [req.user.teamId]);
-        
-        res.json(progress.rows[0] || {
-            attempted: 0,
-            total: 0,
-            solved: 0,
-            earned_score: 0,
-            total_score: 0
-        });
-    } catch (error) {
-        console.error('❌ Error fetching progress:', error);
-        res.status(500).json({ error: error.message });
-    }
-});
-
-// 15. Complete Round 2
-router.post('/complete', authenticateToken, async (req, res) => {
-    try {
-        await pool.query(
-            `UPDATE round2_sessions 
-             SET end_time = NOW(), status = 'completed' 
-             WHERE team_id = $1`,
-            [req.user.teamId]
-        );
-        
-        await pool.query(
-            `UPDATE teams 
-             SET round2_completed = TRUE 
-             WHERE id = $1`,
-            [req.user.teamId]
-        );
-        
-        res.json({ success: true, message: 'Round 2 completed!' });
-    } catch (error) {
-        console.error('❌ Error completing round 2:', error);
         res.status(500).json({ error: error.message });
     }
 });

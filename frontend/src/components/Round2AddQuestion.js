@@ -109,7 +109,8 @@ const Round2AddQuestion = ({ onQuestionAdded }) => {
             // Prepare data for API
             const questionData = {
                 title: formData.title,
-                difficulty: formData.difficulty,
+                difficulty: formData.difficulty === 'easy' ? 'Easy' :
+                            formData.difficulty === 'medium' ? 'Medium' : 'Hard',
                 problem_statement: formData.problem_statement,
                 description: formData.problem_statement,
                 sample_input: formData.sample_input,

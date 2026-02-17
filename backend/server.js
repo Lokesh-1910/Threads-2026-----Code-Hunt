@@ -18,7 +18,7 @@ const io = socketIo(server, {
 });
 
 // Import routes - FIX THE PATH
-const round2Routes = require(path.join(__dirname, 'routes', 'round2'));
+const round2Routes = require('./routes/round2');
 
 // Middleware
 app.use(cors());
@@ -404,37 +404,32 @@ app.get('/api/admin/round2/questions', authenticateToken, verifyAdmin, async (re
     }
 });
 
-// POST new Round 2 question (Coding)
 // POST new Round 2 question (Coding) - COMPLETELY FIXED VERSION
 app.post('/api/admin/round2/questions', authenticateToken, verifyAdmin, async (req, res) => {
-    const { 
-        title, 
-        difficulty, 
+    const {
+        title,
+        difficulty,
         problem_statement,
         description,
-        sample_input, 
-        sample_output, 
-        points, 
+        sample_input,
+        sample_output,
+        points,
         time_limit,
-        test_cases 
+        test_cases
     } = req.body;
 
-    // ✅ FIX: Format difficulty to match database constraint
-    const validDifficulties = ['Easy', 'Medium', 'Hard'];
+    // ✅ Format difficulty to match database constraint
     let formattedDifficulty = difficulty;
-    
-    // Convert if it's lowercase
     if (difficulty === 'easy') formattedDifficulty = 'Easy';
     else if (difficulty === 'medium') formattedDifficulty = 'Medium';
     else if (difficulty === 'hard') formattedDifficulty = 'Hard';
-    
-    // Validate difficulty is one of the allowed values
-    if (!validDifficulties.includes(formattedDifficulty)) {
-        return res.status(400).json({
-            error: 'Invalid difficulty value. Must be Easy, Medium, or Hard'
-        });
-    }
-    
+    else if (difficulty === 'EASY') formattedDifficulty = 'Easy';
+    else if (difficulty === 'MEDIUM') formattedDifficulty = 'Medium';
+    else if (difficulty === 'HARD') formattedDifficulty = 'Hard';
+
+    console.log('📤 Received difficulty:', difficulty);
+    console.log('📤 Formatted difficulty:', formattedDifficulty);
+
     const client = await pool.connect();
 
     try {
@@ -444,12 +439,12 @@ app.post('/api/admin/round2/questions', authenticateToken, verifyAdmin, async (r
         const finalDescription = description || problem_statement;
 
         // Validate required fields
-        if (!title || !difficulty || !finalDescription) {
-            return res.status(400).json({ 
+        if (!title || !formattedDifficulty || !finalDescription) {
+            return res.status(400).json({
                 error: 'Missing required fields',
                 details: {
                     title: !title,
-                    difficulty: !difficulty,
+                    difficulty: !formattedDifficulty,
                     description: !finalDescription
                 }
             });
@@ -461,12 +456,10 @@ app.post('/api/admin/round2/questions', authenticateToken, verifyAdmin, async (r
             FROM information_schema.columns 
             WHERE table_name = 'round2_questions'
         `);
-        
+
         const columns = tableInfo.rows.map(row => row.column_name);
         console.log('📊 Available columns:', columns);
 
-        // ✅ FIXED: Using different variable names throughout
-        
         // Build insert query based on available columns
         const insertColumns = [];
         const insertValues = [];
@@ -475,7 +468,8 @@ app.post('/api/admin/round2/questions', authenticateToken, verifyAdmin, async (r
 
         // Always include these
         insertColumns.push('title', 'difficulty');
-        insertValues.push(title, difficulty);
+        // ✅ FIXED: Use formattedDifficulty here!
+        insertValues.push(title, formattedDifficulty);
         placeholders.push(`$${valueIndex++}`, `$${valueIndex++}`);
 
         // Handle description/problem_statement
@@ -495,19 +489,19 @@ app.post('/api/admin/round2/questions', authenticateToken, verifyAdmin, async (r
             insertValues.push(sample_input);
             placeholders.push(`$${valueIndex++}`);
         }
-        
+
         if (sample_output && columns.includes('sample_output')) {
             insertColumns.push('sample_output');
             insertValues.push(sample_output);
             placeholders.push(`$${valueIndex++}`);
         }
-        
+
         if (points && columns.includes('points')) {
             insertColumns.push('points');
             insertValues.push(points);
             placeholders.push(`$${valueIndex++}`);
         }
-        
+
         if (time_limit && columns.includes('time_limit')) {
             insertColumns.push('time_limit');
             insertValues.push(time_limit);
@@ -524,7 +518,6 @@ app.post('/api/admin/round2/questions', authenticateToken, verifyAdmin, async (r
         console.log('📝 Insert query:', query);
         console.log('📝 Insert values:', insertValues);
 
-        // ✅ FIXED: Using insertResult instead of questionResult
         const insertResult = await client.query(query, insertValues);
         const newQuestionId = insertResult.rows[0].id;
 
@@ -550,18 +543,29 @@ app.post('/api/admin/round2/questions', authenticateToken, verifyAdmin, async (r
             testcasesCount: test_cases?.length || 0
         });
 
-    } catch (error) {
-        await client.query('ROLLBACK');
-        console.error('❌ Error adding round2 question:', error);
-        res.status(500).json({ 
-            success: false,
-            error: error.message,
-            detail: error.detail
-        });
-    } finally {
+    }  catch (error) {
+    await client.query('ROLLBACK');
+    console.error('='.repeat(50));
+    console.error('❌ ERROR ADDING ROUND 2 QUESTION:');
+    console.error('Error message:', error.message);
+    console.error('Error detail:', error.detail);
+    console.error('Error code:', error.code);
+    console.error('Error stack:', error.stack);
+    console.error('='.repeat(50));
+    
+    // Send detailed error response
+    res.status(500).json({
+        success: false,
+        error: error.message,
+        detail: error.detail || 'No additional details',
+        code: error.code,
+        hint: 'Check server logs for more information'
+    });
+} finally {
         client.release();
     }
 });
+
 // DELETE Round 2 question
 app.delete('/api/admin/round2/questions/:id', authenticateToken, verifyAdmin, async (req, res) => {
     const questionId = parseInt(req.params.id);
@@ -929,10 +933,10 @@ app.post('/api/auth/login', async (req, res) => {
 // Get team details including round status (UPDATED)
 app.get('/api/team/details', authenticateToken, async (req, res) => {
     const teamId = req.user.teamId;
-    
+
     try {
         console.log('🔍 Fetching team details for team ID:', teamId);
-        
+
         const result = await pool.query(
             `SELECT 
                 id, 
@@ -949,19 +953,19 @@ app.get('/api/team/details', authenticateToken, async (req, res) => {
             WHERE id = $1`,
             [teamId]
         );
-        
+
         if (result.rows.length === 0) {
             console.log('❌ Team not found for ID:', teamId);
             return res.status(404).json({ error: 'Team not found' });
         }
-        
+
         console.log('✅ Team details found:', result.rows[0]);
-        
+
         res.json({
             success: true,
             team: result.rows[0]
         });
-        
+
     } catch (error) {
         console.error('❌ Error fetching team details:', error);
         res.status(500).json({ error: error.message });

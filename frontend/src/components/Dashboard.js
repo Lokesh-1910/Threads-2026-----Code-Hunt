@@ -140,34 +140,34 @@ function Dashboard() {
         }
     };
 
-    const handleStartRound2 = async (e) => {
-        e.preventDefault();
-        setError('');
-        setSuccess('');
-        setLoading(true);
+    // In Dashboard.js, find the function that handles Round 2 start
+const handleStartRound2 = async (e) => {
+    e.preventDefault();
+    setError('');
+    setSuccess('');
+    setLoading(true);
 
-        try {
-            const token = localStorage.getItem('token');
-
-            const response = await axios.post('https://codehunt-backend-xo52.onrender.com/api/round2/start', {
-                roundPassword: round2Password
-            }, {
-                headers: { 'Authorization': `Bearer ${token}` }
-            });
-
-            if (response.data.success) {
-                setSuccess('✅ Round 2 started! Redirecting to coding platform...');
-                setTimeout(() => {
-                    navigate('/round2');
-                }, 1500);
-            }
-
-        } catch (err) {
-            setError(err.response?.data?.error || 'Invalid round password');
-        } finally {
-            setLoading(false);
+    try {
+        const token = localStorage.getItem('token');
+        
+        // First, get the list of available questions
+        const questionsResponse = await axios.get('https://codehunt-backend-xo52.onrender.com/api/round2/questions', {
+            headers: { 'Authorization': `Bearer ${token}` }
+        });
+        
+        if (questionsResponse.data && questionsResponse.data.length > 0) {
+            // Navigate to the first question
+            const firstQuestionId = questionsResponse.data[0].id;
+            navigate(`/round2/question/${firstQuestionId}`);
+        } else {
+            setError('No questions available for Round 2');
         }
-    };
+    } catch (err) {
+        setError(err.response?.data?.error || 'Failed to start Round 2');
+    } finally {
+        setLoading(false);
+    }
+};
 
     const handleLogout = () => {
         localStorage.clear();
